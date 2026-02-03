@@ -29,6 +29,6 @@ class Stroke {
   }
 
   String _colorToHex(Color color) {
-    return color.value.toRadixString(16).substring(2).padLeft(6, '0');
+    return '#${color.value.toRadixString(16).padLeft(8,'0')}';
   }
 }

@@ -113,10 +113,16 @@ class DrawingCubit extends Cubit<DrawingState> {
   Future<void> saveFile() async {
     try {
       final documentToSave = XournalDocument(
-        version: '4',
+        version: '0.8.2',
+        creator: 'xournalpp 1.2.10',
+        fileVersion: 4,
+        title: 'Meu Documento Xournal++ Web',
+        previewBase64: '',
         pages: [
           Page(
             backgroundType: 'solid',
+            backgroundColor: Colors.white,
+            backgroundStyle: 'lined',
             strokes: state.strokes,
           ),
         ], 

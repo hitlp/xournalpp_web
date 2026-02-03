@@ -50,12 +50,20 @@ class FileRepositoryImpl implements FileRepository{
     print('----------------------------------');
 
     final rootElement = document.findElements('xournal').first;
-    final version = rootElement.getAttribute('version') ?? 'unknow';
+    final creator = rootElement.getAttribute('creator') ?? 'unknow';
+    final fileVersion = int.tryParse(rootElement.getAttribute('fileversion') ?? '0') ?? 0;
+    final title = rootElement.findElements('title').firstOrNull?.innerText ?? '';
+    final preview = rootElement.findElements('preview').firstOrNull?.innerText ?? '';
+    //final version = rootElement.getAttribute('version') ?? 'unknow';
 
     final List<domain.Page> pages = [];
 
     for (final pageElement in rootElement.findElements('page')) {
+      final pageWidth = double.tryParse(pageElement.getAttribute('width') ?? '0.0') ?? 0.0;
+      final pageHeight = double.tryParse(pageElement.getAttribute('height') ?? '0.0') ?? 0.0;
       final backgroundElement = pageElement.findElements('background').firstOrNull;
+      final backgroudColor = _parseColor(backgroundElement?.getAttribute('color') ?? '#FFFFFFFF');
+      final backgroundStyle = backgroundElement?.getAttribute('style') ?? 'lined';
       final backgroundType = backgroundElement?.getAttribute('type') ?? 'solid';
       final pdfFile = backgroundElement?.getAttribute('filename');
 
@@ -63,7 +71,7 @@ class FileRepositoryImpl implements FileRepository{
 
       for (final layerElement in pageElement.findElements('layer')) {
         for(final strokeElement in layerElement.findElements('stroke')) {
-          final color = _parseColor(strokeElement.getAttribute('color') ?? '000000');
+          final color = _parseColor(strokeElement.getAttribute('color') ?? '#000000FF');
           final width = double.tryParse(strokeElement.getAttribute('width') ?? '1.0') ?? 1.0;
           final pointsString = strokeElement.text.trim();
           final pointsList = pointsString.split(RegExp(r'\s+')).map(double.tryParse).whereType<double>().toList();
@@ -83,19 +91,30 @@ class FileRepositoryImpl implements FileRepository{
         backgroundType: backgroundType,
         pdfFile: pdfFile,
         strokes: strokes,
+        width: pageWidth,
+        height: pageHeight,
+        backgroundColor: backgroudColor,
+        backgroundStyle: backgroundStyle,
       ));
     }
 
     return XournalDocument(
       pages: pages, 
-      version: version
+      version: creator,
+      creator: creator,
+      fileVersion: fileVersion,
+      title: title,
+      previewBase64: preview,
     );
   }
 
   Color _parseColor(String hex) {
-    final buffer = StringBuffer();
-    if(hex.length == 6 || hex.length == 7) buffer.write('ff');
-    buffer.write(hex.replaceFirst('#', ''));
-    return Color(int.parse(buffer.toString(), radix: 16));
+    String cleanHex = hex.startsWith('#') ? hex.substring(1) : hex;
+    if(cleanHex.length == 6) {
+      cleanHex = 'FF' + cleanHex;
+    } else if (cleanHex.length != 8) {
+      return Colors.black;
+    }
+    return Color(int.parse(cleanHex, radix: 16));
   }
 }
