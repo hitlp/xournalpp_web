@@ -5,18 +5,35 @@ class Stroke {
   final List<Offset> points;
   final Color color;
   final double strokeWidth;
+  final String tool;
 
   Stroke({
     required this.points,
     required this.color,
     required this.strokeWidth,
+    this.tool = "pen",
   });
+
+  Stroke copyWith({
+    List<Offset>? points,
+    Color? color,
+    double? strokeWidth,
+    String? tool,
+  }) {
+    return Stroke(
+      points: points ?? this.points, 
+      color: color ?? this.color, 
+      strokeWidth: strokeWidth ?? this.strokeWidth,
+      tool: tool ?? this.tool,
+    );
+  }
 
   XmlElement toXmlElement() {
     final builder = XmlBuilder();
     builder.element(
       'stroke',
       attributes: {
+        'tool': tool,
         'color': _colorToHex(color),
         'width': strokeWidth.toStringAsFixed(1),
       },

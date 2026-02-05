@@ -21,6 +21,26 @@ class Page {
     this.backgroundStyle = 'lined'
   });
 
+  Page copyWith({
+    String? backgroundType,
+    String? pdfFile,
+    List<Stroke>? strokes,
+    double? width,
+    double? height,
+    Color? backgroundColor,
+    String? backgroundStyle,
+  }) {
+    return Page(
+      backgroundType: backgroundType ?? this.backgroundType, 
+      pdfFile: pdfFile ?? this.pdfFile,
+      strokes: strokes ?? this.strokes,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      backgroundColor: backgroundColor ?? this.backgroundColor,
+      backgroundStyle: backgroundStyle ?? this.backgroundStyle,
+    );
+  }
+
   XmlElement toXmlElement() {
     final builder = XmlBuilder();
     builder.element(

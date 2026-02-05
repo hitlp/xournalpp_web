@@ -4,77 +4,82 @@ import 'package:xournalpp_web/features/drawing_canvas/domain/entities/document.d
 import 'package:xournalpp_web/features/drawing_canvas/domain/entities/drawing_tool.dart';
 import 'package:xournalpp_web/features/drawing_canvas/domain/entities/stroke.dart';
 import 'package:xournalpp_web/features/drawing_canvas/presentation/bloc/drawing_state.dart';
+import 'package:xournalpp_web/features/file_management/domain/usecases/export_pdf_file.dart';
 import 'package:xournalpp_web/features/file_management/domain/usecases/open_xopp_file.dart';
 import 'package:xournalpp_web/features/drawing_canvas/domain/entities/page.dart';
 import 'package:xournalpp_web/features/file_management/domain/usecases/save_xopp_file.dart';
-import 'package:xournalpp_web/features/file_management/data/repositories/file_repository_impl.dart';
 
 class DrawingCubit extends Cubit<DrawingState> {
 
   final OpenXoppFile openXoppFile;
   final SaveXoppFile saveXoppFile;
+  final ExportPdfFile exportPdfFile;
 
-  DrawingCubit() 
-    : openXoppFile = OpenXoppFile(FileRepositoryImpl()),
-      saveXoppFile = SaveXoppFile(FileRepositoryImpl()),
-      super(DrawingState(strokes: []));
+  DrawingCubit({
+    required this.openXoppFile,
+    required this.saveXoppFile,
+    required this.exportPdfFile,
+  }) : super(DrawingState(strokes: []));
+
 
   void startDrawing(Offset point) {
     if(state.currentTool == DrawingTool.pen) {
-      final newStroke = Stroke(
-        points: [point],
-        color: state.currentColor,
-        strokeWidth: state.currentWidth,
+      emit(state.copyWith(
+          currentStroke: Stroke(
+            points: [point], color: state.currentColor, strokeWidth: state.currentWidth),
+        )
       );
-      emit(state.copyWith(currentStroke: newStroke));
     } else if (state.currentTool == DrawingTool.eraser) {
-      _eraseAtPoint(point);
+        emit(state.copyWith(
+          currentStroke: Stroke(points: [point], color: Colors.transparent, strokeWidth: state.eraserWidth, tool: 'eraser'),
+        )
+      );
     }
   }
 
   void updateDrawing(Offset point) {
+    if (state.currentStroke == null) return;
     if (state.currentTool == DrawingTool.pen) {
-      if (state.currentStroke == null) return;
-      final updatePoints = List<Offset>.from(state.currentStroke!.points)..add(point);
-      final updateStroke = Stroke(
-        points: updatePoints,
-        color: state.currentStroke!.color,
-        strokeWidth: state.currentStroke!.strokeWidth,
-      );
-      emit(state.copyWith(currentStroke: updateStroke));
+      final newPoints = List<Offset>.from(state.currentStroke!.points)..add(point);
+      emit(state.copyWith(currentStroke: state.currentStroke!.copyWith(points: newPoints)));
     } else if (state.currentTool == DrawingTool.eraser) {
-      _eraseAtPoint(point);
+      final newPoints = List<Offset>.from(state.currentStroke!.points)..add(point);
+      emit(state.copyWith(currentStroke: state.currentStroke!.copyWith(points: newPoints)));
     }
   }
 
   void endDrawing(){
-    if (state.currentTool == DrawingTool.pen) {
-      if(state.currentStroke == null) return;
-      final finalStroke = List<Stroke>.from(state.strokes)..add(state.currentStroke!);
-      emit(state.copyWith(strokes: finalStroke, currentStroke: null));
+    if(state.currentStroke != null && state.currentStroke!.points.isNotEmpty) {
+      if(state.currentTool == DrawingTool.pen) {
+        emit(state.copyWith(
+          strokes: List<Stroke>.from(state.strokes)..add(state.currentStroke!),
+          currentStroke: null,
+        ));
+      } else if (state.currentTool == DrawingTool.eraser) {
+        emit(state.copyWith(
+          currentStroke: null,
+        ));
+      }
     }
   }
 
   void _eraseAtPoint(Offset point) {
     final newStrokes = <Stroke>[];
-    final eraserRect = Rect.fromCircle(
-      center: point, 
-      radius: state.eraserWidth /2
-    );
-
     for (final stroke in state.strokes) {
-      bool intercects = false;
+      bool intersects = false;
       for (final p in stroke.points) {
-        if (eraserRect.contains(p)) {
-          intercects = true;
+        if ((p - point).distance <= state.eraserWidth / 2) {
+          intersects = true;
+          break;
         }
       }
-      if(!intercects) {
+      if (!intersects) {
         newStrokes.add(stroke);
       }
     }
     emit(state.copyWith(strokes: newStrokes));
   }
+
 
   void changeColor(Color color) {
     emit(state.copyWith(currentColor: color));
@@ -94,14 +99,23 @@ class DrawingCubit extends Cubit<DrawingState> {
 
   Future<void> openFile() async {
     try {
-      final document = await openXoppFile.call();
-
-      if(document != null && document.pages.isNotEmpty) {
-        emit(state.copyWith(strokes: document.pages.first.strokes, currentStroke: null));
-        print('Documento ${document.version} carregado com sucesso com ${document.pages.first.strokes.length} traços!');
+      final document = await openXoppFile();
+      if (document != null && document.pages.isNotEmpty) {
+        emit(state.copyWith(
+          currentDocument: document,
+          currentPageIndex: 0,
+          strokes: document.pages.first.strokes,
+          currentStroke: null,
+        ));
+        print('Documento ${document.creator} carregado com sucesso com ${document.pages.length} páginas!');
       } else if (document != null && document.pages.isEmpty) {
-        emit(state.copyWith(strokes: [], currentStroke: null));
-        print('Documento ${document.version} carregado, mas sem páginas ou traços.');
+        emit(state.copyWith(
+          currentDocument: document,
+          currentPageIndex: 0,
+          strokes: [],
+          currentStroke: null,
+        ));
+        print('Documento ${document.creator} carregado, mas sem páginas ou traços.');
       } else {
         print('Nenhum arquivo selecionado ou erro no parsing.');
       }
@@ -110,14 +124,22 @@ class DrawingCubit extends Cubit<DrawingState> {
     }
   }
 
+
   Future<void> saveFile() async {
     try {
-      final documentToSave = XournalDocument(
-        version: '0.8.2',
+      final documentToSave = state.currentDocument?.copyWith(
+        pages: state.currentDocument!.pages.map((page) {
+          if (state.currentDocument!.pages.indexOf(page) == state.currentPageIndex) {
+            return page.copyWith(strokes: state.strokes);
+          }
+          return page;
+        }).toList(),
+      ) ?? XournalDocument(
         creator: 'xournalpp 1.2.10',
         fileVersion: 4,
         title: 'Meu Documento Xournal++ Web',
         previewBase64: '',
+        version: '',
         pages: [
           Page(
             backgroundType: 'solid',
@@ -125,14 +147,62 @@ class DrawingCubit extends Cubit<DrawingState> {
             backgroundStyle: 'lined',
             strokes: state.strokes,
           ),
-        ], 
+        ],
       );
-
-      const filename = 'new_doc.xopp';
-      await saveXoppFile.call(documentToSave, filename);
+ 
+      const filename = 'meu_documento.xopp';
+      await saveXoppFile(documentToSave, filename);
       print('Documento salvo com sucesso: $filename');
     } catch (e) {
       print('Erro ao salvar o arquivo: $e');
     }
+  }
+
+  Future<void> exportPdf() async {
+    try {
+      if (state.currentDocument == null) {
+        print('Nenhum documento carregado para exportar para PDF.');
+        return;
+      }
+      final documentToExport = state.currentDocument!.copyWith(
+        pages: state.currentDocument!.pages.map((page) {
+          if (state.currentDocument!.pages.indexOf(page) == state.currentPageIndex) {
+            return page.copyWith(strokes: state.strokes);
+          }
+          return page;
+        }).toList(),
+      );
+ 
+      const filename = 'meu_documento.pdf';
+      await exportPdfFile(documentToExport, filename);
+      print('Documento exportado para PDF com sucesso: $filename');
+    } catch (e) {
+      print('Erro ao exportar para PDF: $e');
+    }
+  }
+
+  void goToPage(int pageIndex) {
+    if (state.currentDocument == null || pageIndex < 0 || pageIndex >= state.currentDocument!.pages.length) {
+      return;
+    }
+    emit(state.copyWith(
+      currentPageIndex: pageIndex,
+      strokes: state.currentDocument!.pages[pageIndex].strokes,
+      currentStroke: null,
+    ));
+  }
+
+  void nextPage() {
+    if (state.currentDocument == null || state.currentPageIndex >= state.currentDocument!.pages.length - 1) {
+      return;
+    }
+    goToPage(state.currentPageIndex + 1);
+  }
+  
+  void previousPage() {
+    if (state.currentDocument == null || state.currentPageIndex <= 0) {
+      return;
+    }
+      goToPage(state.currentPageIndex - 1);
   }
 }

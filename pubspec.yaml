@@ -39,6 +39,8 @@ dependencies:
   xml: ^6.3.0
   archive: ^3.4.9
   file_picker: ^10.3.10
+  pdf: ^3.11.3
+  printing: ^5.14.2
 
 dev_dependencies:
   flutter_test:

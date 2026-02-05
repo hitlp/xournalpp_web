@@ -8,18 +8,6 @@ class OpenXoppFile {
   OpenXoppFile(this.repository);
 
   Future<XournalDocument?> call() async {
-    FilePickerResult? result= await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['xopp'],
-      withData: true,
-    );
-
-    if(result != null && result.files.isNotEmpty) {
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if(bytes == null) return null;
-      return repository.parseXoppFile(bytes);
-    }
-    return null;
+    return await repository.openXoppFile();
   }
 }
